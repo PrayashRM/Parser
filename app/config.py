@@ -7,6 +7,7 @@ import os
 
 # Gateway
 MAX_FILE_BYTES   = int(os.getenv("MAX_FILE_MB", 50)) * 1024 * 1024
+ASSETS_BASE_DIR = os.getenv("ASSETS_BASE_DIR", "./parsed_outputs")
 
 # Sniffer
 ESCALATION_THRESHOLD = float(os.getenv("ESCALATION_THRESHOLD", 0.65))
