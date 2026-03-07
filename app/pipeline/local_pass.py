@@ -23,10 +23,11 @@ from app.models import (
 )
 from app.config import RENDER_DPI
 from utils.id_gen import make_element_id
+from utils.asset_store import AssetStore
 from utils.temp_manager import TempFileManager
 
 
-async def run_local_pass(pdf_bytes: bytes, doc: DocumentModel) -> DocumentModel:
+async def run_local_pass(pdf_bytes: bytes, doc: DocumentModel, store: AssetStore) -> DocumentModel:
     async with TempFileManager() as tmp:
         pdf_path = tmp.write_bytes("input.pdf", pdf_bytes)
         img_dir  = tmp.make_subdir("raster_figures")
@@ -59,7 +60,7 @@ async def run_local_pass(pdf_bytes: bytes, doc: DocumentModel) -> DocumentModel:
             section_path = tracker.update(markdown, page_num)
 
             # --- Figure elements from raster images injected by pymupdf4llm ------
-            figure_elements = _extract_raster_figures(markdown, page_num, img_dir, section_path)
+            figure_elements = _extract_raster_figures(markdown, page_num, img_dir, section_path, store)
 
             # --- Clean prose text ------------------------------------------------
             clean_text = _strip_image_tags(markdown).strip()
@@ -146,6 +147,7 @@ def _extract_raster_figures(
     page_num: int,
     img_dir: Path,
     section_path: List[str],
+    store: AssetStore
 ) -> List[ParsedElement]:
     """
     PyMuPDF4LLM injects markdown image tags for raster-embedded figures.
@@ -153,13 +155,16 @@ def _extract_raster_figures(
     """
     elements = []
     for idx, match in enumerate(_IMG_TAG_RE.finditer(markdown)):
-        img_path = Path(match.group(1))
+        img_path = img_dir/Path(match.group(1)).name
+        image_b64, file_path = None, None
+
         if not img_path.is_absolute():
             img_path = img_dir / img_path.name
 
-        image_b64 = None
         if img_path.exists():
             image_b64 = base64.b64encode(img_path.read_bytes()).decode("ascii")
+            filename  = f"p{page_num}_raster_fig_{idx}.png"
+            file_path = store.save_image(image_b64, filename) 
 
         # Try to find a caption on the line immediately after the image tag
         caption = _find_caption(markdown, match.end())
@@ -173,7 +178,11 @@ def _extract_raster_figures(
             source       = ContentSource.PYMUPDF,
             caption      = caption,
             section_path = section_path,
-            original     = OriginalAsset(image_b64=image_b64, page_number=page_num),
+            original     = OriginalAsset(
+                image_b64=image_b64,
+                file_path=file_path,
+                page_number=page_num
+            ),
         ))
 
     return elements
