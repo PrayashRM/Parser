@@ -2,6 +2,14 @@
 
 """
 gateway.py — Phase 01: Ingestion Gateway
+                
+                -> validate_and_load() - validates the file regarding
+                                        :- being a pdf or not via magic bytes
+                                        :- pdf being in the size limit(default size limit - 50MB)
+                                        :- pdf mime check to block malicious or corrupt pdf docs
+
+                -> validate_gemini_key() - validates the gemini key given by the user regarding being a valid and non-exhausted key. 
+
 Hard filter before any processing. Every failure mode caught here — before
 compute is spent, API quota used, or anything can corrupt downstream phases.
 """
