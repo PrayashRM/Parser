@@ -1,4 +1,4 @@
-from pipeline.assembly import run_assembly, serialize_to_markdown
+from app.pipeline.assembly import run_assembly, serialize_to_markdown
 from app.models import (
     DocumentModel, PageRecord, ParsedElement,
     ContentType, ContentSource
