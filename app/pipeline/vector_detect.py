@@ -14,13 +14,16 @@ import pymupdf
 from app.config import MIN_DRAWING_AREA, RENDER_DPI
 from app.models import (
     ContentSource, ContentType, DocumentModel, EscalationReason,
-    OriginalAsset, ParsedElement,
+    OriginalAsset, ParsedElement, bbox_overlap_ratio, BBOX_DUPLICATE_THRESHOLD,
 )
 from utils.id_gen import make_element_id
 from utils.temp_manager import TempFileManager
+from utils.asset_store import AssetStore
 
 
-async def run_vector_detection(pdf_bytes: bytes, doc: DocumentModel) -> DocumentModel:
+async def run_vector_detection(pdf_bytes: bytes, 
+                               doc: DocumentModel,
+                               store: AssetStore) -> DocumentModel:
     """
     Renders vector figure regions as high-DPI PNG crops and attaches them as
     FIGURE ParsedElements on their respective PageRecords.
@@ -37,17 +40,31 @@ async def run_vector_detection(pdf_bytes: bytes, doc: DocumentModel) -> Document
             existing_count = len(page_record.by_type(ContentType.FIGURE))
 
             for i, fig in enumerate(page_figures):
-                b64 = base64.b64encode(Path(fig["img_path"]).read_bytes()).decode()
-                el  = ParsedElement(
+                img_bytes = Path(fig["img_path"]).read_bytes()
+                b64       = base64.b64encode(img_bytes).decode()
+                filename  = f"p{page_num}_vector_fig_{i}.png"
+                file_path = store.save_bytes(img_bytes, filename)  # persist to asset store
+
+                # Deduplication check against existing raster figures
+                existing_bboxes = [
+                    el.bbox for el in page_record.by_type(ContentType.FIGURE)
+                    if el.bbox is not None
+                ]
+                if any(bbox_overlap_ratio(fig["bbox"], eb) > BBOX_DUPLICATE_THRESHOLD
+                       for eb in existing_bboxes):
+                    continue
+
+                el = ParsedElement(
                     element_id   = make_element_id(page_num, "figure", existing_count + i),
                     content_type = ContentType.FIGURE,
-                    content      = f"Vector figure on page {page_num}",  # Gemini Route C fills this
+                    content      = "",   # Gemini Route C fills this in Phase 05
                     page_number  = page_num,
-                    confidence   = 0.75,
-                    source       = ContentSource.GEMINI,
+                    confidence   = 0.5,  # Low until Gemini describes it
+                    source       = ContentSource.PYMUPDF,
                     bbox         = fig["bbox"],
                     original     = OriginalAsset(
                         image_b64   = b64,
+                        file_path   = file_path,
                         bbox        = fig["bbox"],
                         page_number = page_num,
                     ),
@@ -59,7 +76,6 @@ async def run_vector_detection(pdf_bytes: bytes, doc: DocumentModel) -> Document
                 page_record.escalation_reasons.append(EscalationReason.VECTOR_FIGURE)
 
     return doc
-
 
 # ---------------------------------------------------------------------------
 # Core detection
