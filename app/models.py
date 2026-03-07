@@ -70,6 +70,7 @@ class OriginalAsset(BaseModel):
     """
     raw_text:    Optional[str]                               = None
     image_b64:   Optional[str]                               = None
+    file_path:   Optional[str]                               = None  # relative path: "assets/p3_figure_0.png"
     mime_type:   str                                         = "image/png"
     bbox:        Optional[Tuple[float, float, float, float]] = None
     page_number: Optional[int]                               = None
